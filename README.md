@@ -1,1 +1,1 @@
-# bookish-rs
+# bookish
