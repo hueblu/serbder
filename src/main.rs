@@ -7,6 +7,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// fn index(req: Request) -> Response {}
+// async fn index(req: Request) -> Response {}
 
-// fn ping(req: Request) -> Response {}
+// async fn ping(req: Request) -> Response {}

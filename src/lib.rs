@@ -24,13 +24,15 @@ impl Server {
 }
 
 async fn process(mut stream: TcpStream) -> Result<()> {
-    let mut buf_reader = BufReader::new(&mut stream);
-    let http_request: Vec<_> = tokio_stream::io::LineStream::new(buf_reader.lines())
-        .map(|result| result?)
-        .take_while(|line| !line.is_empty())
-        .collect();
+    let buf_reader = BufReader::new(&mut stream);
+    let mut http_request = vec![];
 
-    println!("{}", data);
+    let mut lines = buf_reader.lines();
+    while let Some(line) = lines.next_line().await? {
+        http_request.push(line);
+    }
+
+    println!("{:?}", http_request);
     Ok(())
 }
 
