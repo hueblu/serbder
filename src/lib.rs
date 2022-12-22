@@ -1,46 +1,70 @@
-use anyhow::*;
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    net::{TcpListener, TcpStream},
+mod common;
+mod executor;
+
+use executor::Executor;
+use anyhow::Result;
+use std::{
+    collections::VecDeque,
+    io::Read,
+    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    sync::{Arc, Mutex},
 };
 
-pub struct Server {
-    listener: TcpListener,
+type Handler = Box<dyn Fn(Request) -> Response>;
+
+struct Request {
+    stream: TcpStream,
+    buf: Vec<u8>,
 }
 
-impl Server {
-    pub async fn new() -> Result<Server> {
-        Ok(Server {
-            listener: TcpListener::bind("127.0.0.1:6379").await?,
+struct Response {}
+
+pub struct Server {
+    receiver: Receiver,
+    handler: Handler,
+    executor: Executor,
+}
+
+pub struct Receiver {
+    addr: SocketAddr,
+    message_queue: Arc<Mutex<VecDeque<Request>>>,
+}
+
+impl Receiver {
+    pub fn new<A: ToSocketAddrs>(addr: A) -> Result<Receiver> {
+        Self::from_listener(TcpListener::bind(addr)?)
+    }
+
+    pub fn from_listener(listener: TcpListener) -> Result<Receiver> {
+        let addr = listener.local_addr()?;
+
+        let queue = Arc::new(Mutex::new(VecDeque::new()));
+        let queue_inner = queue.clone();
+
+        let _ = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buf = Vec::new();
+
+                stream.read_to_end(&mut buf).unwrap();
+                let req = Request { stream, buf };
+
+                queue_inner.lock().unwrap().push_back(req);
+            }
+        });
+
+        Ok(Receiver {
+            addr,
+            message_queue: queue,
         })
     }
-
-    pub async fn run(&self) -> Result<()> {
+    
+    pub fn run(&mut self) -> Result<()> {
         loop {
-            let (stream, _) = self.listener.accept().await?;
-            process(stream).await?;
+            self.message_queue.lock().unwrap();
+            let next = self.message_queue
         }
-    }
-}
-
-async fn process(mut stream: TcpStream) -> Result<()> {
-    let buf_reader = BufReader::new(&mut stream);
-    let mut http_request = vec![];
-
-    let mut lines = buf_reader.lines();
-    while let Some(line) = lines.next_line().await? {
-        http_request.push(line);
-    }
-
-    println!("{:?}", http_request);
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+        
+        Ok(())
     }
 }
